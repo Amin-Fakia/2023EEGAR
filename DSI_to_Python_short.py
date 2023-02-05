@@ -30,7 +30,7 @@ from numpy.fft import rfftfreq
 import json
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
-from functions import getRGB,get_mesh,RBF_Interpolation,get_sensor_3DLocations
+from functions import getRGB,get_mesh,RBF_Interpolation,get_sensor_3DLocations,findVert
 from dsi_24_montage import ch_pos, chnls
 
 mne.set_log_level("ERROR")
@@ -66,13 +66,18 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 		self.channels = ["P3","C3","F3","Fz","F4","C4","P4","Cz","CM",
 				"A1","Fp1","Fp2","T3","T5","O1","O2","X3","X2",
 				"F7","F8","X1","A2","T6","T4","TRG"]
-		sub_channels = ["O1","O2"]
 		self.excl_channels = ["TRG","X1","X2","X3","CM"]
-		self.excl_channels_idx = []
+		self.channels_idx = list(range(len(self.channels)))
+		#self.excl_channels_idx = []
 		for r in self.excl_channels:
-			self.excl_channels_idx.append(self.channels.index(r))
+			#self.excl_channels_idx.append(self.channels.index(r))
+			self.channels_idx.remove(self.channels.index(r))
+		
 
-		self.excl_channels = [d for i, d in enumerate(self.channels) if d not in self.excl_channels]
+		self.channels_idx_temp = self.channels_idx
+		self.channels = [d for i, d in enumerate(self.channels) if d not in self.excl_channels]
+
+		self.sensor_locations_temp = self.sensor_locations
 		self.data_thread = threading.Thread(target=self.parse_data)		
 		self.sample_freq = 300
 		self.fps = 0
@@ -127,10 +132,17 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 							self.fmains = float(mains)
 			self.latest_packets = []
 			self.latest_packet_headers = []
-	
-	def log_dsi(self):
+
+	def set_channels(self,checked):
+		self.channels_idx_temp =np.array(self.channels_idx)[checked] # tolist()
+		temp_idx = np.array(list(range(len(self.channels))))[checked]
+		self.sensor_locations_temp = [b for j,b in enumerate(self.sensor_locations) if j in temp_idx]
 		
-		return dict(zip(self.excl_channels,self.power_values))
+
+		
+	def log_dsi(self):
+		print(len(self.power_values))
+		return dict(zip(np.array(self.channels)[self.channels_idx_temp].tolist(),self.power_values))
 	# def start_data_parse(self):
 	def get_fps(self):
 		return self.fps
@@ -155,7 +167,7 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
  
 		while True:
 			t1 = time.time()
-			data_raw = [d for i, d in enumerate(self.signal_log[:,-self.packet_size:]) if i not in self.excl_channels_idx] # O1, O2
+			data_raw = [d for i, d in enumerate(self.signal_log[:,-self.packet_size:]) if i in self.channels_idx_temp] # O1, O2
 			
 			try:
 				self.clean_data = mne.filter.filter_data(data_raw,sfreq=self.sample_freq,l_freq=5,h_freq=12)
@@ -177,24 +189,31 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 		test_hostname = '127.0.0.1'
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		host,port = socket.gethostbyname(test_hostname ), 25001
-		
-		intrp = RBF_Interpolation(self.mesh,self.sensor_locations,range(20))
-		self.mesh.compute_quality().cmap('jet', input_array=intrp, on="points")
+		#vedo.settings.allow_interaction = True
+		# intrp = RBF_Interpolation(self.mesh,self.sensor_locations,range(20))
+		# self.mesh.compute_quality().cmap('jet', input_array=intrp, on="points")
+		#proj_snsrs = vedo.Points(findVert(self.sensor_locations_temp,self.mesh),r=12)
+		proj_snsrs = vedo.Points(findVert(self.sensor_locations,self.mesh),r=12)
+		plot = vedo.Plotter()
+		plot.show(self.mesh,proj_snsrs ,interactive= False,bg="black",elevation=-30)
 		while counter < 100:
 			
 			try:
 				s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 				s.connect((host,port))
-				#print(len(self.power_values))
-				intrp = RBF_Interpolation(self.mesh,self.sensor_locations,self.power_values)
+				
+				
+				intrp = RBF_Interpolation(self.mesh,self.sensor_locations_temp,self.power_values)
 				self.mesh.compute_quality().cmap('jet', input_array=intrp, on="points")
 				self.colors = getRGB(self.mesh).tolist()
 				
 
 				msg = json.dumps({"mylist": self.colors,"win_idx":0})
 				s.sendall(bytes(msg,encoding="utf-8"))
+				plot.render()
+				#plot.show(self.mesh,proj_snsrs ,interactive= False,bg="black",q=True)
 				
-				time.sleep(1/60)
+				#time.sleep(1/60)
 			except Exception as e:
 				print("[Unity Socket Error] Connection Failed, retrying.. " + str(e))
 				counter+=1
