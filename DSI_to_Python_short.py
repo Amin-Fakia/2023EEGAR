@@ -194,14 +194,15 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 		# self.mesh.compute_quality().cmap('jet', input_array=intrp, on="points")
 		#proj_snsrs = vedo.Points(findVert(self.sensor_locations_temp,self.mesh),r=12)
 		proj_snsrs = vedo.Points(findVert(self.sensor_locations,self.mesh),r=12)
+		labs = proj_snsrs.labels(self.channels,c="white",xrot=90,yrot=-45)
 		plot = vedo.Plotter()
-		plot.show(self.mesh,proj_snsrs ,interactive= False,bg="black",elevation=-30)
-		while counter < 100:
+		plot.show(self.mesh,proj_snsrs,labs,interactive= False,bg="black",elevation=-30)
+		while counter < 100*60:
 			
 			try:
-				s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-				s.connect((host,port))
-				
+				# s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				# s.connect((host,port))
+				plot.process_events()
 				
 				intrp = RBF_Interpolation(self.mesh,self.sensor_locations_temp,self.power_values)
 				self.mesh.compute_quality().cmap('jet', input_array=intrp, on="points")
@@ -209,7 +210,7 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 				
 
 				msg = json.dumps({"mylist": self.colors,"win_idx":0})
-				s.sendall(bytes(msg,encoding="utf-8"))
+				#s.sendall(bytes(msg,encoding="utf-8"))
 				plot.render()
 				#plot.show(self.mesh,proj_snsrs ,interactive= False,bg="black",q=True)
 				
@@ -217,7 +218,7 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 			except Exception as e:
 				print("[Unity Socket Error] Connection Failed, retrying.. " + str(e))
 				counter+=1
-				time.sleep(1)
+			time.sleep(1/60)
 			
 		s.close()
 	
@@ -225,13 +226,13 @@ class TCPParser: # The script contains one main class which handles DSI-Streamer
 
 
 		
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
 	
-	tcp = TCPParser('localhost',9067,1)
+# 	tcp = TCPParser('localhost',9067,1)
 	
 	
-	tcp.real_time()
+# 	tcp.real_time()
 	
 	
 	#tcp.real_time()
